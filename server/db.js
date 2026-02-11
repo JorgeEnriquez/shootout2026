@@ -102,6 +102,11 @@ function initializeTables() {
 
 function saveDb() {
   if (dbInstance) {
+    // Ensure the directory exists (important for Railway persistent volumes)
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
     const data = dbInstance.export();
     const buffer = Buffer.from(data);
     fs.writeFileSync(DB_PATH, buffer);
