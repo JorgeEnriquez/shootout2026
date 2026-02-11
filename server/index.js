@@ -35,6 +35,29 @@ app.use('/api/prize-pool', prizePoolRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/deadlines', deadlinesRoutes);
 
+// Health / diagnostic endpoint (temporary — remove after deployment is verified)
+app.get('/api/health', async (req, res) => {
+  try {
+    const { getDb: hGetDb } = require('./db');
+    const db = await hGetDb();
+    const users = db.exec('SELECT COUNT(*) FROM users');
+    const teams = db.exec('SELECT COUNT(*) FROM teams');
+    const matches = db.exec('SELECT COUNT(*) FROM matches');
+    const deadlines = db.exec('SELECT COUNT(*) FROM deadlines');
+    const adminCheck = db.exec("SELECT user_id, email, role FROM users WHERE role = 'admin'");
+    res.json({
+      db_path: process.env.DATABASE_PATH || 'default (server/pool.db)',
+      users: users[0]?.values[0][0] || 0,
+      teams: teams[0]?.values[0][0] || 0,
+      matches: matches[0]?.values[0][0] || 0,
+      deadlines: deadlines[0]?.values[0][0] || 0,
+      admin: adminCheck[0]?.values || 'none',
+    });
+  } catch (err) {
+    res.json({ error: err.message });
+  }
+});
+
 // Serve static files from client dist folder
 const distPath = path.join(__dirname, '../client/dist');
 app.use(express.static(distPath));
