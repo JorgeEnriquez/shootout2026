@@ -80,20 +80,39 @@ const bcrypt = require('bcryptjs');
 async function autoSeedIfEmpty() {
   try {
     const db = await getDb();
-    const result = db.exec('SELECT COUNT(*) FROM users');
-    const userCount = result.length > 0 ? result[0].values[0][0] : 0;
+    const adminResult = db.exec("SELECT COUNT(*) FROM users WHERE role = 'admin'");
+    const adminCount = adminResult.length > 0 ? adminResult[0].values[0][0] : 0;
 
-    if (userCount > 0) return; // DB already has data
+    if (adminCount > 0) return; // Admin exists, DB already seeded
 
     console.log('Empty database detected — auto-seeding test tournament...');
 
-    // Admin user
+    // Admin user — upgrade if already registered, otherwise insert
     const adminHash = await bcrypt.hash('admin123', 10);
-    db.run(
-      `INSERT INTO users (email, password_hash, display_name, role, first_login_complete)
-       VALUES (?, ?, ?, 'admin', 1)`,
-      ['admin@shootout.com', adminHash, 'El Comisionado']
-    );
+    const existingAdmin = db.exec("SELECT user_id FROM users WHERE email = 'admin@shootout.com'");
+    if (existingAdmin.length > 0 && existingAdmin[0].values.length > 0) {
+      db.run(
+        `UPDATE users SET password_hash = ?, display_name = 'El Comisionado', role = 'admin', first_login_complete = 1
+         WHERE email = 'admin@shootout.com'`,
+        [adminHash]
+      );
+      console.log('Upgraded existing admin@shootout.com to admin role');
+    } else {
+      db.run(
+        `INSERT INTO users (email, password_hash, display_name, role, first_login_complete)
+         VALUES (?, ?, ?, 'admin', 1)`,
+        ['admin@shootout.com', adminHash, 'El Comisionado']
+      );
+    }
+
+    // Skip tournament data if teams already exist (partial seed recovery)
+    const teamCheck = db.exec('SELECT COUNT(*) FROM teams');
+    const teamCount = teamCheck.length > 0 ? teamCheck[0].values[0][0] : 0;
+    if (teamCount > 0) {
+      saveDb();
+      console.log('Admin created/upgraded. Teams already exist — skipping tournament seed.');
+      return;
+    }
 
     // Teams
     const teams = [
