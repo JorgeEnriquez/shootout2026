@@ -58,6 +58,38 @@ app.get('/api/health', async (req, res) => {
   }
 });
 
+// Temporary: shift all dates by N days (hit once then remove)
+app.post('/api/admin/shift-dates', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days) || 1;
+    const { getDb: sGetDb, saveDb: sSaveDb } = require('./db');
+    const db = await sGetDb();
+
+    // Shift match datetimes
+    db.run(`UPDATE matches SET match_datetime = datetime(match_datetime, '+${days} day')`);
+
+    // Shift deadline datetimes
+    db.run(`UPDATE deadlines SET deadline_datetime = datetime(deadline_datetime, '+${days} day')`);
+
+    // Also unlock any deadlines that were auto-locked by the old times
+    db.run(`UPDATE deadlines SET is_locked = 0`);
+
+    sSaveDb();
+
+    const newMatches = db.exec('SELECT match_id, match_datetime FROM matches ORDER BY match_datetime');
+    const newDeadlines = db.exec('SELECT stage, deadline_datetime, is_locked FROM deadlines');
+
+    res.json({
+      success: true,
+      shifted_by_days: days,
+      matches: newMatches[0]?.values || [],
+      deadlines: newDeadlines[0]?.values || [],
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Serve static files from client dist folder
 const distPath = path.join(__dirname, '../client/dist');
 app.use(express.static(distPath));
