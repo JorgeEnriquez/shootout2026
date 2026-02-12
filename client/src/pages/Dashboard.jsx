@@ -207,13 +207,13 @@ export default function Dashboard() {
             <h2 className="text-xl font-bold text-gray-900 mb-4">Top 5 Leaderboard</h2>
 
             {loading ? (
-              <div className="space-y-3">
+              <div className="space-y-1.5">
                 {[...Array(5)].map((_, i) => (
-                  <SkeletonLoader key={i} className="h-10" />
+                  <SkeletonLoader key={i} className="h-8" />
                 ))}
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {leaderboard.slice(0, 5).map((entry) => {
                   const medal = getMedalEmoji(entry.rank);
                   const isCurrentUser = entry.user_id === user?.id;
@@ -221,23 +221,23 @@ export default function Dashboard() {
                   return (
                     <div
                       key={entry.user_id}
-                      className={`flex items-center justify-between p-3 rounded-lg transition ${
+                      className={`flex items-center justify-between py-2 px-3 rounded-lg transition ${
                         isCurrentUser
                           ? 'bg-blue-50 border border-blue-200'
                           : 'bg-gray-50 hover:bg-gray-100'
                       }`}
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-lg font-bold w-8 text-center text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold w-7 text-center text-gray-600">
                           {medal || `#${entry.rank}`}
                         </span>
-                        <span className={`font-semibold ${
+                        <span className={`text-sm font-semibold ${
                           isCurrentUser ? 'text-blue-700' : 'text-gray-900'
                         }`}>
                           {entry.display_name}
                         </span>
                       </div>
-                      <span className={`font-bold ${
+                      <span className={`text-sm font-bold ${
                         isCurrentUser ? 'text-blue-700' : 'text-gray-600'
                       }`}>
                         {entry.total_points} pts
