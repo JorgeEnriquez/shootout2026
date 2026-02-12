@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
 
@@ -60,6 +60,16 @@ const getTeamFlag = (teamName) => {
   return flagMap[teamName] || '';
 };
 
+// Format time with EST timezone
+const formatTimeEST = (dateStr) => {
+  const date = new Date(dateStr);
+  return date.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  }) + ' EST';
+};
+
 const MatchSkeleton = () => (
   <div className="bg-white rounded-lg p-3 animate-pulse">
     <div className="flex items-center justify-between">
@@ -70,7 +80,7 @@ const MatchSkeleton = () => (
   </div>
 );
 
-const PredictionCard = ({ match, prediction, onPredictionChange, isLocked }) => {
+const PredictionCard = ({ match, prediction, onPredictionChange, isLocked, onSubmit, isSaving, hasUnsavedChanges }) => {
   const handleHomeChange = (value) => {
     onPredictionChange(match.id, {
       ...prediction,
@@ -91,6 +101,8 @@ const PredictionCard = ({ match, prediction, onPredictionChange, isLocked }) => 
 
   const isCompleted = match.status === 'completed';
   const canEdit = !isLocked && !isCompleted;
+  const hasBothScores = prediction?.homeScore !== null && prediction?.homeScore !== undefined
+    && prediction?.awayScore !== null && prediction?.awayScore !== undefined;
 
   // Use actual points from the prediction data if match is completed
   let resultIcon = null;
@@ -201,6 +213,28 @@ const PredictionCard = ({ match, prediction, onPredictionChange, isLocked }) => 
           Final score: {match.homeScore}-{match.awayScore}
         </div>
       )}
+
+      {/* Per-match Submit Button */}
+      {canEdit && (
+        <div className="mt-3 flex items-center justify-end gap-2">
+          {hasBothScores && !hasUnsavedChanges && (
+            <span className="text-xs text-green-600 font-medium">\u2705 Saved</span>
+          )}
+          {hasBothScores && hasUnsavedChanges && (
+            <button
+              onClick={() => onSubmit(match.id)}
+              disabled={isSaving}
+              className={`px-4 py-1.5 rounded-md text-sm font-semibold transition-all ${
+                isSaving
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm'
+              }`}
+            >
+              {isSaving ? 'Saving...' : 'Submit Prediction'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -211,13 +245,14 @@ export default function PredictionsPage() {
   const [selectedStage, setSelectedStage] = useState(null);
   const [matches, setMatches] = useState([]);
   const [predictions, setPredictions] = useState({});
+  const [savedPredictions, setSavedPredictions] = useState({}); // Tracks what's on the server
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [savingMatchId, setSavingMatchId] = useState(null); // Which match is currently being saved
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(null);
   const [deadlines, setDeadlines] = useState({});
 
-  // Fetch deadlines on mount → derive stage tabs dynamically
+  // Fetch deadlines on mount -> derive stage tabs dynamically
   useEffect(() => {
     const fetchDeadlines = async () => {
       try {
@@ -259,6 +294,8 @@ export default function PredictionsPage() {
           predictionMap[pred.matchId] = pred;
         });
         setPredictions(predictionMap);
+        // Deep copy of server state for change detection
+        setSavedPredictions(JSON.parse(JSON.stringify(predictionMap)));
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -266,7 +303,9 @@ export default function PredictionsPage() {
       }
     };
 
-    fetchData();
+    if (selectedStage) {
+      fetchData();
+    }
   }, [selectedStage]);
 
   const handlePredictionChange = (matchId, updatedPrediction) => {
@@ -275,6 +314,21 @@ export default function PredictionsPage() {
       [matchId]: updatedPrediction,
     }));
   };
+
+  // Check if a specific match has unsaved changes
+  const hasUnsavedChanges = useCallback((matchId) => {
+    const current = predictions[matchId];
+    const saved = savedPredictions[matchId];
+
+    // If no current prediction, no changes
+    if (!current || current.homeScore === null || current.awayScore === null) return false;
+
+    // If no saved prediction exists, it's a new prediction
+    if (!saved || saved.homeScore === null || saved.homeScore === undefined) return true;
+
+    // Compare values
+    return current.homeScore !== saved.homeScore || current.awayScore !== saved.awayScore;
+  }, [predictions, savedPredictions]);
 
   // Check if current stage is locked (by deadline or explicit lock)
   const isCurrentStageLocked = () => {
@@ -287,36 +341,34 @@ export default function PredictionsPage() {
 
   const stageLocked = isCurrentStageLocked();
 
-  const handleSavePredictions = async () => {
-    setSaving(true);
+  // Submit a single match prediction
+  const handleSubmitSingle = async (matchId) => {
+    const pred = predictions[matchId];
+    if (!pred || pred.homeScore === null || pred.awayScore === null) return;
+
+    setSavingMatchId(matchId);
     setShowError(null);
     try {
-      // Only submit predictions for matches in the current stage view
-      const currentMatchIds = new Set(matches.map(m => m.id));
-      const predictionsToSubmit = Object.entries(predictions)
-        .filter(([matchId]) => currentMatchIds.has(parseInt(matchId)) || currentMatchIds.has(matchId))
-        .filter(([, pred]) => pred.homeScore !== null && pred.awayScore !== null)
-        .map(([matchId, pred]) => ({
-          matchId: parseInt(matchId),
-          homeScore: pred.homeScore,
-          awayScore: pred.awayScore,
-        }));
+      await api.submitPredictions([{
+        matchId: parseInt(matchId),
+        homeScore: pred.homeScore,
+        awayScore: pred.awayScore,
+      }]);
 
-      if (predictionsToSubmit.length === 0) {
-        setShowError('Please fill in at least one prediction before saving.');
-        setSaving(false);
-        return;
-      }
+      // Update saved state to match current
+      setSavedPredictions(prev => ({
+        ...prev,
+        [matchId]: { ...pred },
+      }));
 
-      await api.submitPredictions(predictionsToSubmit);
       setShowSuccess(true);
-      setTimeout(() => setShowSuccess(false), 3000);
+      setTimeout(() => setShowSuccess(false), 2000);
     } catch (error) {
-      console.error('Error saving predictions:', error);
-      setShowError(error.message || 'Failed to save predictions. Please try again.');
+      console.error('Error saving prediction:', error);
+      setShowError(error.message || 'Failed to save prediction. Please try again.');
       setTimeout(() => setShowError(null), 5000);
     } finally {
-      setSaving(false);
+      setSavingMatchId(null);
     }
   };
 
@@ -328,6 +380,9 @@ export default function PredictionsPage() {
       pred.homeScore !== null && pred.homeScore !== undefined &&
       pred.awayScore !== null && pred.awayScore !== undefined
   ).length;
+
+  // Count unsaved predictions
+  const unsavedCount = matches.filter(m => hasUnsavedChanges(m.id)).length;
 
   // Calculate stage stats for completed matches
   const getStageStat = () => {
@@ -356,10 +411,7 @@ export default function PredictionsPage() {
     const isPast = deadlineDate < now;
 
     return {
-      dateStr: deadlineDate.toLocaleString('en-US', {
-        weekday: 'short', month: 'short', day: 'numeric',
-        hour: 'numeric', minute: '2-digit', hour12: true
-      }),
+      dateStr: formatTimeEST(stageDeadline.deadline),
       isPast,
       isLocked: stageDeadline.isLocked,
     };
@@ -368,7 +420,7 @@ export default function PredictionsPage() {
   const deadlineInfo = getDeadlineDisplay();
 
   return (
-    <div className="bg-gray-50 min-h-screen pb-24">
+    <div className="bg-gray-50 min-h-screen pb-8">
       {/* Header */}
       <div className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4">
@@ -431,6 +483,9 @@ export default function PredictionsPage() {
         {/* Predictions Count */}
         <div className="mb-4 text-sm text-gray-600 font-medium">
           {filledPredictions}/{matches.length} predictions filled
+          {unsavedCount > 0 && (
+            <span className="ml-2 text-amber-600">({unsavedCount} unsaved)</span>
+          )}
         </div>
 
         {/* Matches */}
@@ -449,6 +504,9 @@ export default function PredictionsPage() {
                 prediction={predictions[match.id] || null}
                 onPredictionChange={handlePredictionChange}
                 isLocked={stageLocked}
+                onSubmit={handleSubmitSingle}
+                isSaving={savingMatchId === match.id}
+                hasUnsavedChanges={hasUnsavedChanges(match.id)}
               />
             ))}
           </div>
@@ -459,35 +517,16 @@ export default function PredictionsPage() {
         )}
       </div>
 
-      {/* Sticky Save Button */}
-      {!stageLocked && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
-          <div className="max-w-4xl mx-auto px-4 py-4">
-            <button
-              onClick={handleSavePredictions}
-              disabled={saving || matches.length === 0}
-              className={`w-full py-3 rounded-lg font-semibold transition-all ${
-                saving || matches.length === 0
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-blue-500 text-white hover:bg-blue-600 shadow-md'
-              }`}
-            >
-              {saving ? 'Saving...' : 'Save Predictions'}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Success Toast */}
       {showSuccess && (
-        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-full shadow-lg text-sm font-medium z-50">
-          Predictions saved!
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-full shadow-lg text-sm font-medium z-50">
+          Prediction saved!
         </div>
       )}
 
       {/* Error Toast */}
       {showError && (
-        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-full shadow-lg text-sm font-medium z-50 max-w-xs text-center">
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-6 py-3 rounded-full shadow-lg text-sm font-medium z-50 max-w-xs text-center">
           {showError}
         </div>
       )}

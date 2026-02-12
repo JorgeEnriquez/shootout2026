@@ -68,14 +68,19 @@ const getTeamFlag = (teamName) => {
 
 const formatDateTime = (dateString) => {
   const date = new Date(dateString);
-  const options = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-  return date.toLocaleDateString('en-US', options);
+  return date.toLocaleString('en-US', {
+    timeZone: 'America/New_York',
+    month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  }) + ' EST';
 };
 
 const formatDateHeader = (dateString) => {
   const date = new Date(dateString);
-  const options = { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' };
-  return date.toLocaleDateString('en-US', options);
+  return date.toLocaleDateString('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  });
 };
 
 const groupMatchesByDate = (matches) => {

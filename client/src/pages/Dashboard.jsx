@@ -132,13 +132,17 @@ export default function Dashboard() {
     return null;
   };
 
-  const formatMatchTime = (dateStr) => {
+  const formatMatchDateTime = (dateStr) => {
     const date = new Date(dateStr);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
+    return date.toLocaleString('en-US', {
+      timeZone: 'America/New_York',
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
       minute: '2-digit',
       hour12: true,
-    });
+    }) + ' EST';
   };
 
   if (error) {
@@ -206,16 +210,15 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm text-gray-600 mb-1">{nextDeadline.stage}</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {nextDeadline.deadline.toLocaleDateString('en-US', {
+                  {nextDeadline.deadline.toLocaleString('en-US', {
+                    timeZone: 'America/New_York',
                     weekday: 'short',
                     month: 'short',
                     day: 'numeric',
-                  })}{' '}
-                  {nextDeadline.deadline.toLocaleTimeString('en-US', {
                     hour: 'numeric',
                     minute: '2-digit',
                     hour12: true,
-                  })}
+                  })} EST
                 </p>
               </div>
               <div className={`text-right ${
@@ -326,7 +329,7 @@ export default function Dashboard() {
                         {match.stage}
                       </span>
                       <span className="text-xs font-medium text-gray-500">
-                        {formatMatchTime(match.date)}
+                        {formatMatchDateTime(match.date)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
