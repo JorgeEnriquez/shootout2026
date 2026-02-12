@@ -8,6 +8,24 @@ function SkeletonLoader({ className = 'h-12 w-full' }) {
   return <div className={`bg-gray-200 rounded animate-pulse ${className}`} />;
 }
 
+// Flag map for team emojis
+const getTeamFlag = (teamName) => {
+  const flagMap = {
+    'Argentina': '\u{1F1E6}\u{1F1F7}', 'Australia': '\u{1F1E6}\u{1F1FA}',
+    'Brazil': '\u{1F1E7}\u{1F1F7}', 'Canada': '\u{1F1E8}\u{1F1E6}',
+    'Croatia': '\u{1F1ED}\u{1F1F7}', 'England': '\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}',
+    'France': '\u{1F1EB}\u{1F1F7}', 'Germany': '\u{1F1E9}\u{1F1EA}',
+    'Japan': '\u{1F1EF}\u{1F1F5}', 'Mexico': '\u{1F1F2}\u{1F1FD}',
+    'Netherlands': '\u{1F1F3}\u{1F1F1}', 'Portugal': '\u{1F1F5}\u{1F1F9}',
+    'Spain': '\u{1F1EA}\u{1F1F8}', 'Uruguay': '\u{1F1FA}\u{1F1FE}',
+    'United States': '\u{1F1FA}\u{1F1F8}', 'USA': '\u{1F1FA}\u{1F1F8}',
+    'Morocco': '\u{1F1F2}\u{1F1E6}', 'Italy': '\u{1F1EE}\u{1F1F9}',
+    'Belgium': '\u{1F1E7}\u{1F1EA}', 'Colombia': '\u{1F1E8}\u{1F1F4}',
+    'South Korea': '\u{1F1F0}\u{1F1F7}',
+  };
+  return flagMap[teamName] || '';
+};
+
 // Stage order for determining the "active" stage
 const STAGE_ORDER = [
   'Group Stage',
@@ -23,7 +41,6 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [prizePool, setPrizePool] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
   const [matches, setMatches] = useState([]);
   const [userStats, setUserStats] = useState({ rank: null, points: 0 });
@@ -35,14 +52,12 @@ export default function Dashboard() {
         setLoading(true);
         setError(null);
 
-        const [poolData, leaderboardData, matchesData, deadlinesData] = await Promise.all([
-          api.getPrizePool(),
+        const [leaderboardData, matchesData, deadlinesData] = await Promise.all([
           api.getLeaderboard(),
           api.getMatches(),
           api.getDeadlines(),
         ]);
 
-        setPrizePool(poolData);
         setLeaderboard(leaderboardData || []);
 
         // Find user's stats from leaderboard
@@ -88,7 +103,7 @@ export default function Dashboard() {
           ? matchesData.filter(m => m.stage === activeStage && m.status !== 'completed')
           : matchesData.filter(m => m.status !== 'completed');
 
-        setMatches(activeStageMatches.slice(0, 4));
+        setMatches(activeStageMatches.slice(0, 6));
       } catch (err) {
         setError(err.message || 'Failed to load dashboard data');
         console.error('Dashboard error:', err);
@@ -101,14 +116,6 @@ export default function Dashboard() {
       fetchDashboardData();
     }
   }, [user?.id]);
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
 
   const getTimeUntilDeadline = (deadline) => {
     const now = new Date();
@@ -132,13 +139,20 @@ export default function Dashboard() {
     return null;
   };
 
-  const formatMatchDateTime = (dateStr) => {
+  const formatMatchDay = (dateStr) => {
     const date = new Date(dateStr);
-    return date.toLocaleString('en-US', {
+    return date.toLocaleDateString('en-US', {
       timeZone: 'America/New_York',
       weekday: 'short',
       month: 'short',
       day: 'numeric',
+    });
+  };
+
+  const formatMatchTime = (dateStr) => {
+    const date = new Date(dateStr);
+    return date.toLocaleTimeString('en-US', {
+      timeZone: 'America/New_York',
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
@@ -161,19 +175,20 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-6xl mx-auto space-y-6">
-        {/* Welcome Banner */}
-        <div className="bg-white rounded-xl shadow-sm p-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-6">
-            Welcome back, {user?.display_name || 'Player'}!
-          </h1>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* User Stats Card */}
+        {/* Row 1: Welcome + Stats + Leaderboard side by side */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Left: Welcome + Stats */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h1 className="text-2xl font-bold text-gray-900 mb-4">
+              Welcome back, {user?.display_name || 'Player'}!
+            </h1>
+
             {loading ? (
               <SkeletonLoader className="h-24" />
             ) : (
               <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-6 text-white">
-                <div className="flex justify-between items-start mb-4">
+                <div className="flex justify-between items-start">
                   <div>
                     <p className="text-blue-100 text-sm font-medium">Current Rank</p>
                     <p className="text-4xl font-bold">#{userStats.rank || '—'}</p>
@@ -185,76 +200,9 @@ export default function Dashboard() {
                 </div>
               </div>
             )}
-
-            {/* CTA Card */}
-            {loading ? (
-              <SkeletonLoader className="h-24" />
-            ) : (
-              <div className="flex items-center justify-center">
-                <Link
-                  to="/predictions"
-                  className="inline-block bg-amber-500 hover:bg-amber-600 text-white font-semibold py-3 px-6 rounded-lg transition text-lg shadow-md"
-                >
-                  Submit Predictions
-                </Link>
-              </div>
-            )}
           </div>
-        </div>
 
-        {/* Next Deadline Card */}
-        {!loading && nextDeadline && (
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Next Deadline</h2>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">{nextDeadline.stage}</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {nextDeadline.deadline.toLocaleString('en-US', {
-                    timeZone: 'America/New_York',
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true,
-                  })} EST
-                </p>
-              </div>
-              <div className={`text-right ${
-                nextDeadline.deadline - new Date() < 24 * 60 * 60 * 1000
-                  ? 'text-orange-600'
-                  : 'text-green-600'
-              }`}>
-                <p className="text-sm font-semibold">
-                  {getTimeUntilDeadline(nextDeadline.deadline)}
-                </p>
-                {nextDeadline.deadline - new Date() < 24 * 60 * 60 * 1000 &&
-                  nextDeadline.deadline > new Date() && (
-                  <p className="text-xs mt-1">⏰ Hurry up!</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Jackpot Card */}
-        {loading ? (
-          <SkeletonLoader className="h-32" />
-        ) : (
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-xl shadow-sm p-8 text-white">
-            <p className="text-blue-100 text-sm font-medium mb-2">Prize Pool</p>
-            <h2 className="text-5xl font-bold mb-4">
-              {formatCurrency(prizePool?.total_prize_pool || 0)}
-            </h2>
-            <p className="text-blue-100">
-              {prizePool?.participant_count || 0} participants competing
-            </p>
-          </div>
-        )}
-
-        <div className="grid md:grid-cols-2 gap-6">
-          {/* Leaderboard Preview */}
+          {/* Right: Leaderboard Preview */}
           <div className="bg-white rounded-xl shadow-sm p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-4">Top 5 Leaderboard</h2>
 
@@ -309,63 +257,109 @@ export default function Dashboard() {
               </Link>
             )}
           </div>
+        </div>
 
-          {/* Upcoming Matches Card */}
+        {/* Next Deadline Card */}
+        {!loading && nextDeadline && (
           <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Upcoming Matches</h2>
-
-            {loading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, i) => (
-                  <SkeletonLoader key={i} className="h-16" />
-                ))}
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Next Deadline</h2>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 mb-1">{nextDeadline.stage}</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {nextDeadline.deadline.toLocaleString('en-US', {
+                    timeZone: 'America/New_York',
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true,
+                  })} EST
+                </p>
               </div>
-            ) : matches.length > 0 ? (
-              <div className="space-y-3">
-                {matches.map((match) => (
-                  <div key={match.id} className="border border-gray-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-medium text-gray-500 uppercase">
-                        {match.stage}
-                      </span>
-                      <span className="text-xs font-medium text-gray-500">
-                        {formatMatchDateTime(match.date)}
-                      </span>
+              <div className={`text-right ${
+                nextDeadline.deadline - new Date() < 24 * 60 * 60 * 1000
+                  ? 'text-orange-600'
+                  : 'text-green-600'
+              }`}>
+                <p className="text-sm font-semibold">
+                  {getTimeUntilDeadline(nextDeadline.deadline)}
+                </p>
+                {nextDeadline.deadline - new Date() < 24 * 60 * 60 * 1000 &&
+                  nextDeadline.deadline > new Date() && (
+                  <p className="text-xs mt-1">{'⏰'} Hurry up!</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Upcoming Matches — full width, with Submit Predictions button in header */}
+        <div className="bg-white rounded-xl shadow-sm p-6">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-xl font-bold text-gray-900">Upcoming Matches</h2>
+            <Link
+              to="/predictions"
+              className="bg-amber-500 hover:bg-amber-600 text-white font-semibold py-2 px-5 rounded-lg transition text-sm shadow-sm"
+            >
+              Submit Predictions
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(4)].map((_, i) => (
+                <SkeletonLoader key={i} className="h-36" />
+              ))}
+            </div>
+          ) : matches.length > 0 ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {matches.map((match) => {
+                const homeFlag = getTeamFlag(match.homeTeam);
+                const awayFlag = getTeamFlag(match.awayTeam);
+
+                return (
+                  <div key={match.id} className="border border-gray-200 rounded-xl p-4 hover:border-blue-300 transition-colors">
+                    {/* Stage label */}
+                    <div className="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-3">
+                      {match.stage}{match.groupLetter ? ` · Group ${match.groupLetter}` : ''}
                     </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-gray-900 flex-1 text-right">
-                        {match.homeTeam}
-                      </span>
-                      <div className="text-center px-2">
-                        {match.homeScore !== null && match.homeScore !== undefined &&
-                         match.awayScore !== null && match.awayScore !== undefined ? (
-                          <span className="text-lg font-bold text-gray-900">
-                            {match.homeScore}-{match.awayScore}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-gray-400">vs</span>
-                        )}
+
+                    {/* Teams */}
+                    <div className="flex items-center justify-between gap-3 mb-4">
+                      <div className="flex-1 text-center">
+                        <div className="text-2xl mb-1">{homeFlag}</div>
+                        <div className="text-sm font-semibold text-gray-900 leading-tight">{match.homeTeam}</div>
                       </div>
-                      <span className="text-sm font-semibold text-gray-900 flex-1 text-left">
-                        {match.awayTeam}
-                      </span>
+                      <div className="text-gray-400 font-bold text-lg">vs</div>
+                      <div className="flex-1 text-center">
+                        <div className="text-2xl mb-1">{awayFlag}</div>
+                        <div className="text-sm font-semibold text-gray-900 leading-tight">{match.awayTeam}</div>
+                      </div>
+                    </div>
+
+                    {/* Date and time */}
+                    <div className="border-t pt-3 text-center">
+                      <p className="text-xs font-medium text-gray-500">{formatMatchDay(match.date)}</p>
+                      <p className="text-xs text-gray-400">{formatMatchTime(match.date)}</p>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500 text-sm">No upcoming matches scheduled</p>
-            )}
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-gray-500 text-sm">No upcoming matches scheduled</p>
+          )}
 
-            {!loading && matches.length > 0 && (
-              <Link
-                to="/matches"
-                className="inline-block mt-4 text-blue-600 hover:text-blue-700 font-medium text-sm"
-              >
-                See all matches →
-              </Link>
-            )}
-          </div>
+          {!loading && matches.length > 0 && (
+            <Link
+              to="/matches"
+              className="inline-block mt-5 text-blue-600 hover:text-blue-700 font-medium text-sm"
+            >
+              See all matches →
+            </Link>
+          )}
         </div>
       </div>
     </div>

@@ -218,7 +218,7 @@ const PredictionCard = ({ match, prediction, onPredictionChange, isLocked, onSub
       {canEdit && (
         <div className="mt-3 flex items-center justify-end gap-2">
           {hasBothScores && !hasUnsavedChanges && (
-            <span className="text-xs text-green-600 font-medium">\u2705 Saved</span>
+            <span className="text-xs text-green-600 font-medium">{'✅'} Saved</span>
           )}
           {hasBothScores && hasUnsavedChanges && (
             <button
