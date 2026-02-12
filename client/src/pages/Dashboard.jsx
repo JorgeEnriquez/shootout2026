@@ -204,7 +204,9 @@ export default function Dashboard() {
 
           {/* Right: Leaderboard Preview */}
           <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Top 5 Leaderboard</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">
+              {leaderboard.length > 0 ? `Top ${Math.min(leaderboard.length, 5)}` : 'Top 5'} Leaderboard
+            </h2>
 
             {loading ? (
               <div className="space-y-1.5">
